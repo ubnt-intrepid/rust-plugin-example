@@ -6,7 +6,7 @@ use std::{os::raw::c_void, path::Path, ptr::NonNull};
 pub mod _export {
     pub use crate::inner::{LoadPluginResult, PluginVTable};
     pub use lazy_static::lazy_static;
-    pub use std::{os::raw::c_void, ptr::NonNull};
+    pub use std::os::raw::c_void;
 }
 
 #[macro_export]
@@ -18,9 +18,7 @@ macro_rules! export_plugin {
                 static ref VTABLE: $crate::_export::PluginVTable = $crate::_export::PluginVTable::new::<$Plugin>();
             }
             $crate::_export::LoadPluginResult {
-                ctx: $crate::_export::NonNull::new(
-                    Box::into_raw(Box::new(<$Plugin>::default())) as *mut $crate::_export::c_void
-                ),
+                ptr: Box::into_raw(Box::new(<$Plugin>::default())) as *mut $crate::_export::c_void,
                 vtable: &*VTABLE,
             }
         }
@@ -55,8 +53,7 @@ impl PluginProxy {
             "plugin version mismatched"
         );
 
-        let ctx = ret
-            .ctx
+        let ctx = NonNull::new(ret.ptr) //
             .ok_or_else(|| anyhow::anyhow!("failed to load the plugin"))?;
 
         Ok(Self {
@@ -115,7 +112,7 @@ mod inner {
 
     #[repr(C)]
     pub struct LoadPluginResult {
-        pub ctx: Option<NonNull<c_void>>,
+        pub ptr: *mut c_void,
         pub vtable: &'static PluginVTable,
     }
 
