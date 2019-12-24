@@ -1,19 +1,8 @@
-use calc::{Plugin, PluginData, PluginVTable};
-use std::os::raw::c_void;
-use std::ptr::NonNull;
+use calc::Plugin;
 
-calc::lazy_static! {
-    static ref VTABLE: PluginVTable = PluginVTable::new::<PluginAdd>();
-}
+calc::export_plugin!(PluginAdd);
 
-#[no_mangle]
-pub unsafe extern "C" fn load_plugin() -> PluginData {
-    PluginData {
-        ctx: NonNull::new(Box::into_raw(Box::new(PluginAdd)) as *mut c_void),
-        vtable: &*VTABLE,
-    }
-}
-
+#[derive(Default)]
 struct PluginAdd;
 
 impl Plugin for PluginAdd {

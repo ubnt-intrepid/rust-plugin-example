@@ -1,21 +1,36 @@
-use libloading::Library;
-use std::os::raw::c_void;
-use std::path::Path;
-use std::ptr::NonNull;
+use crate::inner::{LoadPluginResult, PluginVTable};
+use libloading::{Library, Symbol};
+use std::{os::raw::c_void, path::Path, ptr::NonNull};
 
-pub use crate::vtable::PluginVTable;
-pub use lazy_static::lazy_static;
+#[doc(hidden)] // private API for export_plugin.
+pub mod _export {
+    pub use crate::inner::{LoadPluginResult, PluginVTable};
+    pub use lazy_static::lazy_static;
+    pub use std::{os::raw::c_void, ptr::NonNull};
+}
+
+#[macro_export]
+macro_rules! export_plugin {
+    ($Plugin:ty) => {
+        #[no_mangle]
+        pub unsafe extern "C" fn load_plugin() -> $crate::_export::LoadPluginResult {
+            $crate::_export::lazy_static! {
+                static ref VTABLE: $crate::_export::PluginVTable = $crate::_export::PluginVTable::new::<$Plugin>();
+            }
+            $crate::_export::LoadPluginResult {
+                ctx: $crate::_export::NonNull::new(
+                    Box::into_raw(Box::new(<$Plugin>::default())) as *mut $crate::_export::c_void
+                ),
+                vtable: &*VTABLE,
+            }
+        }
+    };
+}
 
 pub trait Plugin: 'static {
     fn name(&self) -> &str;
     fn operator(&self) -> &str;
     fn calc(&self, lhs: u32, rhs: u32) -> u32;
-}
-
-#[repr(C)]
-pub struct PluginData {
-    pub ctx: Option<NonNull<c_void>>,
-    pub vtable: &'static PluginVTable,
 }
 
 struct PluginProxy {
@@ -30,10 +45,15 @@ impl PluginProxy {
         let lib = Library::new(path.as_ref())?;
 
         let ret = unsafe {
-            let load_plugin =
-                lib.get::<unsafe extern "C" fn() -> PluginData>("load_plugin".as_ref())?;
+            let load_plugin: Symbol<unsafe extern "C" fn() -> LoadPluginResult> =
+                lib.get("load_plugin".as_ref())?;
             load_plugin()
         };
+
+        anyhow::ensure!(
+            ret.vtable.version == crate::inner::VERSION_STR,
+            "plugin version mismatched"
+        );
 
         let ctx = ret
             .ctx
@@ -88,11 +108,20 @@ impl Loader {
     }
 }
 
-mod vtable {
+mod inner {
     use super::*;
+
+    pub const VERSION_STR: &str = env!("CARGO_PKG_VERSION");
+
+    #[repr(C)]
+    pub struct LoadPluginResult {
+        pub ctx: Option<NonNull<c_void>>,
+        pub vtable: &'static PluginVTable,
+    }
 
     #[repr(C)]
     pub struct PluginVTable {
+        pub(crate) version: &'static str,
         pub(crate) name: unsafe extern "C" fn(*const c_void) -> StrSlice,
         pub(crate) operator: unsafe extern "C" fn(*const c_void) -> StrSlice,
         pub(crate) calc: unsafe extern "C" fn(*const c_void, u32, u32) -> u32,
@@ -102,13 +131,15 @@ mod vtable {
     impl PluginVTable {
         pub fn new<P: Plugin>() -> Self {
             Self {
-                name: vtable::name::<P>,
-                operator: vtable::operator::<P>,
-                calc: vtable::calc::<P>,
-                drop: vtable::drop_ctx::<P>,
+                version: VERSION_STR,
+                name: name::<P>,
+                operator: operator::<P>,
+                calc: calc::<P>,
+                drop: drop_ctx::<P>,
             }
         }
     }
+
     #[repr(C)]
     pub(crate) struct StrSlice {
         ptr: *const c_void,

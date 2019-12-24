@@ -12,6 +12,7 @@ path = "src/lib.rs"
 [[bin]]
 name = "calc"
 path = "src/main.rs"
+doc = false
 
 [dependencies]
 anyhow = "1"
