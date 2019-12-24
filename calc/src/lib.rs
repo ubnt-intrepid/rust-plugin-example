@@ -3,39 +3,13 @@ use std::os::raw::c_void;
 use std::path::Path;
 use std::ptr::NonNull;
 
+pub use crate::vtable::PluginVTable;
+pub use lazy_static::lazy_static;
+
 pub trait Plugin: 'static {
     fn name(&self) -> &str;
     fn operator(&self) -> &str;
     fn calc(&self, lhs: u32, rhs: u32) -> u32;
-}
-
-#[repr(C)]
-pub struct StrSlice {
-    ptr: *const c_void,
-    len: usize,
-}
-
-impl StrSlice {
-    #[inline]
-    pub unsafe fn from_str(s: &str) -> Self {
-        Self {
-            ptr: s.as_ptr() as *const c_void,
-            len: s.len(),
-        }
-    }
-
-    #[inline]
-    pub unsafe fn into_str<'s>(self) -> &'s str {
-        std::str::from_utf8_unchecked(std::slice::from_raw_parts(self.ptr as *mut u8, self.len))
-    }
-}
-
-#[repr(C)]
-pub struct PluginVTable {
-    pub name: unsafe extern "C" fn(*const c_void) -> StrSlice,
-    pub operator: unsafe extern "C" fn(*const c_void) -> StrSlice,
-    pub calc: unsafe extern "C" fn(*const c_void, u32, u32) -> u32,
-    pub drop: unsafe extern "C" fn(*mut c_void),
 }
 
 #[repr(C)]
@@ -111,5 +85,67 @@ impl Loader {
 
     pub fn plugins(&self) -> impl Iterator<Item = &'_ dyn Plugin> + '_ {
         self.plugins.iter().map(|plugin| &**plugin)
+    }
+}
+
+mod vtable {
+    use super::*;
+
+    #[repr(C)]
+    pub struct PluginVTable {
+        pub(crate) name: unsafe extern "C" fn(*const c_void) -> StrSlice,
+        pub(crate) operator: unsafe extern "C" fn(*const c_void) -> StrSlice,
+        pub(crate) calc: unsafe extern "C" fn(*const c_void, u32, u32) -> u32,
+        pub(crate) drop: unsafe extern "C" fn(*mut c_void),
+    }
+
+    impl PluginVTable {
+        pub fn new<P: Plugin>() -> Self {
+            Self {
+                name: vtable::name::<P>,
+                operator: vtable::operator::<P>,
+                calc: vtable::calc::<P>,
+                drop: vtable::drop_ctx::<P>,
+            }
+        }
+    }
+    #[repr(C)]
+    pub(crate) struct StrSlice {
+        ptr: *const c_void,
+        len: usize,
+    }
+
+    impl StrSlice {
+        #[inline]
+        pub(crate) unsafe fn from_str(s: &str) -> Self {
+            Self {
+                ptr: s.as_ptr() as *const c_void,
+                len: s.len(),
+            }
+        }
+
+        #[inline]
+        pub(crate) unsafe fn into_str<'s>(self) -> &'s str {
+            std::str::from_utf8_unchecked(std::slice::from_raw_parts(self.ptr as *mut u8, self.len))
+        }
+    }
+
+    unsafe extern "C" fn name<P: Plugin>(ptr: *const c_void) -> StrSlice {
+        let ctx = &*(ptr as *const P);
+        StrSlice::from_str(ctx.name())
+    }
+
+    unsafe extern "C" fn operator<P: Plugin>(ptr: *const c_void) -> StrSlice {
+        let ctx = &*(ptr as *const P);
+        StrSlice::from_str(ctx.operator())
+    }
+
+    unsafe extern "C" fn calc<P: Plugin>(ptr: *const c_void, lhs: u32, rhs: u32) -> u32 {
+        let ctx = &*(ptr as *const P);
+        ctx.calc(lhs, rhs)
+    }
+
+    unsafe extern "C" fn drop_ctx<P: Plugin>(ptr: *mut c_void) {
+        drop(Box::from_raw(ptr as *mut P))
     }
 }

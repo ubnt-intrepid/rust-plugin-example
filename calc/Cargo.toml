@@ -16,3 +16,4 @@ path = "src/main.rs"
 [dependencies]
 anyhow = "1"
 libloading = "0.5"
+lazy_static = "1"
