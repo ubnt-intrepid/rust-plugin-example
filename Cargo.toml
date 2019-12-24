@@ -1,0 +1,6 @@
+[workspace]
+members = [
+    "calc",
+    "calc-plugin-add",
+    "calc-plugin-mul",
+]

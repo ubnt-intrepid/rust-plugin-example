@@ -1,0 +1,11 @@
+{
+    "rust-analyzer.cargo-watch.allTargets": true,
+    "rust-analyzer.cargo-watch.command": "clippy",
+    "rust-analyzer.cargo-watch.arguments": "--workspace",
+    "rust-analyzer.enableCargoWatchOnStartup": "enabled",
+
+    "[rust]": {
+        "editor.formatOnSave": true, 
+        "editor.formatOnSaveTimeout": 1500,
+    }
+}

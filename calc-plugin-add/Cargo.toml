@@ -1,0 +1,13 @@
+[package]
+name = "calc-plugin-add"
+version = "0.1.0"
+publish = false
+authors = ["Yusuke Sasaki <yusuke.sasaki.nuem@gmail.com>"]
+edition = "2018"
+
+[lib]
+path = "lib.rs"
+crate-type = ["cdylib"]
+
+[dependencies]
+calc = { version = "0.1", path = "../calc" }

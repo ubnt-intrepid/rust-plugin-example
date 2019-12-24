@@ -1,0 +1,18 @@
+[package]
+name = "calc"
+version = "0.1.0"
+publish = false
+authors = ["Yusuke Sasaki <yusuke.sasaki.nuem@gmail.com>"]
+edition = "2018"
+
+[lib]
+name = "calc"
+path = "src/lib.rs"
+
+[[bin]]
+name = "calc"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+libloading = "0.5"
